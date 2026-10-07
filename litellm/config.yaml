@@ -1,0 +1,17 @@
+# Konfiguracja proxy LiteLLM.
+# Modele i wirtualne klucze dla aplikacji zarządzamy w bazie (STORE_MODEL_IN_DB=True, UI pod /ui),
+# więc plik zawiera tylko ustawienia bazowe.
+#
+# Jev (TypeSafe) nie jest modelem czatu: ma własny endpoint "evaluate", dlatego klienci wołają
+# pass-through  <LITELLM_URL>/typesafe/...  z wirtualnym kluczem LiteLLM (nagłówek Authorization: Bearer).
+# Proxy podstawia TYPESAFE_API_KEY ze swojego środowiska i liczy koszty per klucz.
+# Dokumentacja: https://docs.litellm.ai/docs/pass_through/typesafe
+
+model_list: []
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+
+litellm_settings:
+  drop_params: true

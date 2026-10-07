@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # Nazwa jobu "test" jest wymaganym checkiem ochrony gałęzi (jak w pozostałych repo).
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Walidacja docker-compose.yml
+        run: |
+          POSTGRES_PASSWORD=x LITELLM_DB_PASSWORD=x LITELLM_MASTER_KEY=x LITELLM_SALT_KEY=x \
+            docker compose config --quiet
+
+      - name: Składnia skryptów (bash -n) i shellcheck
+        run: |
+          for f in scripts/*.sh postgres/init/*.sh; do bash -n "$f"; done
+          shellcheck -x -P SCRIPTDIR scripts/*.sh postgres/init/*.sh
+
+      - name: Brak sekretów w repo
+        run: |
+          if git ls-files | grep -E '(^|/)(\.env|init\.json)$'; then
+            echo "Plik z sekretami jest śledzony przez git" >&2; exit 1
+          fi

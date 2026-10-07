@@ -1,0 +1,86 @@
+# Infrastruktura WorthMyTime: PostgreSQL + LiteLLM (proxy do modeli, w tym Jev z TypeSafe) + HashiCorp Vault.
+# Pierwsze uruchomienie na serwerze: ./scripts/bootstrap.sh
+# Kolejne: git pull && ./scripts/unseal.sh && docker compose up -d
+name: wmt-infra
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: wmt-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-wmt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?uruchom ./scripts/bootstrap.sh albo ustaw POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-worthmytime}
+      # używane tylko przez postgres/init/01-litellm.sh (wykonuje się raz, na pustym wolumenie)
+      LITELLM_DB_PASSWORD: ${LITELLM_DB_PASSWORD:?uruchom ./scripts/bootstrap.sh albo ustaw LITELLM_DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    networks: [wmt]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wmt} -d ${POSTGRES_DB:-worthmytime}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  litellm:
+    image: ghcr.io/berriai/litellm:${LITELLM_TAG:-main-stable}
+    container_name: wmt-litellm
+    restart: unless-stopped
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASSWORD}@postgres:5432/litellm
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?uruchom ./scripts/bootstrap.sh albo ustaw LITELLM_MASTER_KEY}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?uruchom ./scripts/bootstrap.sh albo ustaw LITELLM_SALT_KEY}
+      # klucz TypeSafe jest tylko na proxy; klienci (backend) używają wirtualnych kluczy LiteLLM
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+      STORE_MODEL_IN_DB: "True"
+    volumes:
+      - ./litellm/config.yaml:/app/config.yaml:ro
+    ports:
+      - "127.0.0.1:${LITELLM_PORT:-4000}:4000"
+    networks: [wmt]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:4000/health/liveliness')"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  vault:
+    image: hashicorp/vault:${VAULT_TAG:-1.18}
+    container_name: wmt-vault
+    restart: unless-stopped
+    command: ["server", "-config=/vault/config/vault.hcl"]
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+    volumes:
+      - ./vault/config:/vault/config:ro
+      - vault-data:/vault/file
+    ports:
+      # tylko loopback: z zewnątrz przez reverse proxy z TLS albo tunel SSH
+      - "127.0.0.1:${VAULT_PORT:-8200}:8200"
+    networks: [wmt]
+    healthcheck:
+      # `vault status` kończy się kodem 2 także dla zapieczętowanego Vaulta, więc sprawdzamy tylko, że API odpowiada
+      test: ["CMD-SHELL", "vault status 2>&1 | grep -q Initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+networks:
+  # nazwana sieć: backend z innego compose'a dołącza przez `networks: wmt: external: true`
+  wmt:
+    name: wmt
+
+volumes:
+  pgdata:
+  vault-data:
