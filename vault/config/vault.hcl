@@ -1,5 +1,9 @@
 ui = true
 
+# mlock wyłączony, bo w nieuprzywilejowanym kontenerze LXC (Proxmox, Mikrus) Vault nie może zablokować pamięci
+# i nie startuje. Skutek: pamięć Vaulta może trafić do swapu, więc swap na serwerze ma być wyłączony albo szyfrowany.
+disable_mlock = true
+
 storage "file" {
   path = "/vault/file"
 }
