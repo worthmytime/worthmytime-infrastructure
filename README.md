@@ -54,6 +54,7 @@ Klucz `TYPESAFE_API_KEY` ma tylko proxy. Aplikacja używa wirtualnego klucza Lit
 ## Ograniczenia obecnej konfiguracji (świadome)
 
 - Vault: jeden klucz odpieczętowania, TLS wyłączony (port tylko na loopback), operator używa root tokena. Przy wyjściu poza jednego serwera: Shamir 3/5, TLS, AppRole dla usług zamiast root tokena.
+- Vault: `disable_mlock = true`, żeby stack startował także w nieuprzywilejowanym kontenerze LXC (Proxmox, Mikrus). Pamięć Vaulta może przez to trafić do swapu, więc na serwerze swap ma być wyłączony albo szyfrowany (sprawdzenie: `swapon --show`).
 - Backup: wolumeny `pgdata` i `vault-data` nie są jeszcze kopiowane (osobne zadanie).
 - Podłączenie backendu do `wmt` i przeniesienie jego Postgresa tutaj to osobne zmiany w `worthmytime-backend`.
 
